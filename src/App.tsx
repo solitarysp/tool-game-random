@@ -54,7 +54,16 @@ export default function App() {
   const [showImportExamples, setShowImportExamples] = useState(false);
   const [showNumberPrompt, setShowNumberPrompt] = useState(false);
   const [numberN, setNumberN] = useState("50");
+  const [appMessage, setAppMessage] = useState<{type: "error" | "success" | "info", text: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper for message timeout
+  const showMessage = (text: string, type: "error" | "success" | "info" = "info") => {
+    setAppMessage({ text, type });
+    setTimeout(() => {
+      setAppMessage(null);
+    }, 4000);
+  };
 
   // Load participants from localStorage on mount
   useEffect(() => {
@@ -81,7 +90,7 @@ export default function App() {
     e.preventDefault();
     if (!newMember.trim()) return;
     if (participants.includes(newMember.trim())) {
-      alert("Tên này đã tồn tại trong danh sách!");
+      showMessage("Tên này đã tồn tại trong danh sách!", "error");
       return;
     }
     const updated = [...participants, newMember.trim()];
@@ -102,7 +111,7 @@ export default function App() {
     e.preventDefault();
     const n = parseInt(numberN);
     if (isNaN(n) || n < 1) {
-      alert("Vui lòng nhập một số hợp lệ lớn hơn 0");
+      showMessage("Vui lòng nhập một số hợp lệ lớn hơn 0", "error");
       return;
     }
     const list = Array.from({ length: n }, (_, i) => (i + 1).toString());
@@ -149,13 +158,13 @@ export default function App() {
       
       if (newItems.length > 0) {
         saveRoster([...participants, ...newItems]);
-        alert(`Đã nhập thành công ${newItems.length} người từ ${source}.`);
+        showMessage(`Đã nhập thành công ${newItems.length} người từ ${source}.`, "success");
       } else {
-        alert(`Không tìm thấy tên mới nào hoặc tất cả đã có trong danh sách từ ${source}.`);
+        showMessage(`Không tìm thấy tên mới nào hoặc tất cả đã có trong danh sách từ ${source}.`, "info");
       }
     } catch (e) {
       console.error("Import error:", e);
-      alert("Có lỗi khi xử lý dữ liệu.");
+      showMessage("Có lỗi khi xử lý dữ liệu.", "error");
     }
   };
 
@@ -193,16 +202,14 @@ export default function App() {
       importFromText(text, "URL");
       setImportUrl("");
     } catch (e: any) {
-      alert("Lỗi khi tải từ URL: " + e.message);
+      showMessage("Lỗi khi tải từ URL: " + e.message, "error");
     } finally {
       setIsImportingUrl(false);
     }
   };
 
   const clearRoster = () => {
-    if (window.confirm("Bạn có chắc chắn muốn xoá sạch danh sách tham gia không?")) {
-      saveRoster([]);
-    }
+    saveRoster([]);
   };
 
   return (
@@ -556,6 +563,26 @@ export default function App() {
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Global Toast Message */}
+      <AnimatePresence>
+        {appMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className={`fixed bottom-6 right-6 z-[200] max-w-sm px-4 py-3 rounded-xl shadow-2xl border flex items-start gap-3 flex-row-reverse ${
+              appMessage.type === "error" 
+                ? "bg-rose-950/90 border-rose-500/50 text-rose-200"
+                : appMessage.type === "success" 
+                  ? "bg-emerald-950/90 border-emerald-500/50 text-emerald-200"
+                  : "bg-indigo-950/90 border-indigo-500/50 text-indigo-200"
+            } backdrop-blur-md`}
+          >
+            <p className="text-sm font-medium leading-tight">{appMessage.text}</p>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

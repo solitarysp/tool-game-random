@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, RefreshCw, Eye, EyeOff, ShieldAlert, Award, Copy, Check, SmilePlus, HelpCircle } from "lucide-react";
+import { RefreshCw, Eye, EyeOff, ShieldAlert, Award, Copy, Check, SmilePlus, HelpCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChallengeCategory } from "../types";
 
@@ -26,8 +26,6 @@ const CATEGORIES: ChallengeCategory[] = [
 
 export default function ChallengeArena() {
   const [activeCategory, setActiveCategory] = useState<"truth" | "dare" | "icebreaker">("truth");
-  const [customVibe, setCustomVibe] = useState("");
-  const [audienceContext, setAudienceContext] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   
   const [prompts, setPrompts] = useState<string[]>([]);
@@ -40,34 +38,48 @@ export default function ChallengeArena() {
   const [penaltyDuration, setPenaltyDuration] = useState("");
   const [penaltyCopied, setPenaltyCopied] = useState(false);
 
+  // Load history from local storage
+  React.useEffect(() => {
+    try {
+      const cachedPrompts = localStorage.getItem("challenge_prompts");
+      const cachedFlipped = localStorage.getItem("challenge_flipped");
+      const cachedActive = localStorage.getItem("challenge_active");
+      const cachedPenalty = localStorage.getItem("challenge_penalty");
+      if (cachedPrompts) setPrompts(JSON.parse(cachedPrompts));
+      if (cachedFlipped) setFlippedCards(JSON.parse(cachedFlipped));
+      if (cachedActive) setActiveCategory(cachedActive as "truth" | "dare" | "icebreaker");
+      if (cachedPenalty) setPenaltyText(cachedPenalty);
+    } catch (e) {}
+  }, []);
+
+  const saveState = (newPrompts: string[], newFlipped: Record<number, boolean>, newCategory: string, newPenalty: string | null) => {
+    localStorage.setItem("challenge_prompts", JSON.stringify(newPrompts));
+    localStorage.setItem("challenge_flipped", JSON.stringify(newFlipped));
+    localStorage.setItem("challenge_active", newCategory);
+    if (newPenalty) {
+      localStorage.setItem("challenge_penalty", newPenalty);
+    } else {
+      localStorage.removeItem("challenge_penalty");
+    }
+  };
+
+  const clearHistory = () => {
+    setPrompts([]);
+    setFlippedCards({});
+    setPenaltyText(null);
+    localStorage.removeItem("challenge_prompts");
+    localStorage.removeItem("challenge_flipped");
+    localStorage.removeItem("challenge_penalty");
+    localStorage.removeItem("challenge_active");
+  };
+
   // Generate prompts
   const generatePrompts = async (catId = activeCategory) => {
     setIsLoading(true);
     setFlippedCards({});
     setWarning(null);
 
-    try {
-      const response = await fetch("/api/gemini/challenges", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category: catId,
-          topic: customVibe || "Vui bựa, phá bĩnh nhưng lịch thiệp",
-          customContext: audienceContext || "Đồng nghiệp công sở văn phòng"
-        })
-      });
-
-      const data = await response.json();
-      if (response.ok && data.prompts) {
-        setPrompts(data.prompts);
-        if (data.warning) setWarning(data.warning);
-      } else {
-        throw new Error(data.error || "Gặp lỗi tạo prompts.");
-      }
-    } catch (err: any) {
-      console.warn("Lỗi tạo thử thách tự động:", err);
-      setWarning("Đang sài bộ câu hỏi độc quyền có sẵn do AI của bạn đang hồi năng lượng!");
-      
+    setTimeout(() => {
       // Traditional offline list fallback triggers
       const fallbacks: Record<string, string[]> = {
         truth: [
@@ -76,7 +88,14 @@ export default function ChallengeArena() {
           "Kể tên 1 thói quen bầy hầy kì lạ nhất của bạn ở nhà mà không ai hay biết!",
           "Bạn đã bao giờ ngủ gật trong giờ làm việc hay cuộc thảo luận trực tuyến chưa?",
           "Điều gì tại công ty khiến bạn cảm thấy mắc cười nhất mỗi khi nhớ tới?",
-          "Ai trong nhóm này là người bạn cảm giác đáng tin nhất khi cần mượn tiền?"
+          "Ai trong nhóm này là người bạn cảm giác đáng tin nhất khi cần mượn tiền?",
+          "Bạn đã từng nói dối sếp để xin nghỉ phép chưa? Và lý do là gì?",
+          "Nếu phải chọn một người trong phòng để đi dạt vào hoang đảo, bạn chọn ai và tại sao?",
+          "Có bao giờ bạn 'tình cờ' nghe được một bí mật động trời của công ty chưa?",
+          "Món đồ đắt tiền nhất bạn từng ấn mua trong lúc căng thẳng công việc là gì?",
+          "Kể tên một người bạn từng crush ngầm trong công ty (không tính người đã có gia đình)!",
+          "Bạn thấy điểm yếu lớn nhất của bản thân trong công việc hiện tại là gì?",
+          "Bạn đã từng khóc vì áp lực công việc bao giờ chưa? Lúc nào?"
         ],
         dare: [
           "Nhảy múa vui nhộn hoặc múa lân không nhạc tại chỗ trong vòng 20 giây!",
@@ -84,7 +103,13 @@ export default function ChallengeArena() {
           "Nhắn tin cảm ơn chân thành đến một thành viên không có mặt trong phòng vì lý do bá đạo!",
           "Dùng vai vẽ lại một hình vuông, hình tròn đồng thời trong 15 giây!",
           "Tự sướng 1 cú ảnh xấu dã man bằng điện thoại rồi gửi thẳng vào nhóm chat chung!",
-          "Líu lưỡi rực rỡ nói nhanh: 'Nồi đồng nấu ốc nồi đất nấu ếch' thật nhanh 3 lần liên tiếp!"
+          "Líu lưỡi rực rỡ nói nhanh: 'Nồi đồng nấu ốc nồi đất nấu ếch' thật nhanh 3 lần liên tiếp!",
+          "Tỏ tềnh một cách sến súa với cái ghế bạn đang ngồi!",
+          "Đội một chiếc thùng carton hoặc áo khoác trùm đầu và đi vòng quanh phòng làm điệu bộ phi hành gia!",
+          "Thực hiện plank hoặc chống đẩy 10 cái ngay tại chỗ!",
+          "Cầm chai nước giả làm míc và cover một đoạn rap thật phiêu!",
+          "Nói tiếng ngoài hành tinh (tự chế) với người đối diện trong 1 phút không được cười!",
+          "Đổi ảnh avatar điện thoại hoặc máy tính thành hình một con vật hài hước trong 24h!"
         ],
         icebreaker: [
           "Nếu cả nhóm lạc lên sao Hỏa và chỉ mang theo 1 vật phẩm văn phòng dã man, bạn mang gì?",
@@ -92,18 +117,31 @@ export default function ChallengeArena() {
           "Nếu được tuyển chọn sếp mới từ các loài động vật hoạt hình, loài nào sẽ cai trị bạn?",
           "Kể về chuyến đi phượt hoặc kì nghỉ tấu hài nhất cùng đám bạn thân!",
           "Mẹo làm việc năng xuất nhất mà bạn tự thấy hãnh diện mà chưa chia sẻ cho ai?",
-          "Nếu bạn bất ngờ trúng giải đặc biệt xổ số Vietlott, ai trong phòng này bạn chiêu đãi đầu tiên?"
+          "Nếu bạn bất ngờ trúng giải đặc biệt xổ số Vietlott, ai trong phòng này bạn chiêu đãi đầu tiên?",
+          "Năng lực siêu nhiên nào bạn muốn sở hữu nhất để áp dụng vào công việc?",
+          "Kỉ niệm ngày đầu tiên bạn bước chân vào công ty là như thế nào?",
+          "Giữa việc được tăng 50% lương nhưng làm việc với người bạn ghét, và giữ nguyên lương nhưng làm với idol, bạn chọn gì?",
+          "Một bài hát luôn nằm trong danh sách phát 'chữa lành' của bạn?",
+          "Nơi nào là 'thánh địa' để bạn chốn vào suy ngẫm trong văn phòng?",
+          "Bạn thích làm việc 4 ngày/tuần mỗi ngày 10 tiếng, hay 5 ngày mỗi ngày 8 tiếng?"
         ]
       };
-      setPrompts(fallbacks[catId] || fallbacks.truth);
-    } finally {
+      
+      const catList = fallbacks[catId] || fallbacks.truth;
+      // pick 6 random distinct items
+      const p = [...catList].sort(() => 0.5 - Math.random()).slice(0, 6);
+      
+      setPrompts(p);
+      saveState(p, {}, catId, penaltyText);
       setIsLoading(false);
-    }
+    }, 600);
   };
 
-  // Run on mount
+  // Run on mount only if there's no cached data
   React.useEffect(() => {
-    generatePrompts();
+    if (prompts.length === 0 && !localStorage.getItem("challenge_prompts")) {
+      generatePrompts();
+    }
   }, []);
 
   const handleCategorySwitch = (catId: "truth" | "dare" | "icebreaker") => {
@@ -112,10 +150,14 @@ export default function ChallengeArena() {
   };
 
   const handleCardFlip = (idx: number) => {
-    setFlippedCards(prev => ({
-      ...prev,
-      [idx]: !prev[idx]
-    }));
+    setFlippedCards(prev => {
+      const next = {
+        ...prev,
+        [idx]: !prev[idx]
+      };
+      saveState(prompts, next, activeCategory, penaltyText);
+      return next;
+    });
   };
 
   const drawQuickPenalty = async () => {
@@ -123,37 +165,25 @@ export default function ChallengeArena() {
     setPenaltyText(null);
     setPenaltyDuration("");
 
-    try {
-      const response = await fetch("/api/gemini/penalty", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          intensity: "funny",
-          userContext: audienceContext || "Hoạt động teambuilding"
-        })
-      });
-
-      const data = await response.json();
-      if (response.ok && data.penalty) {
-        setPenaltyText(data.penalty);
-        setPenaltyDuration(data.duration || "ngay lập tức");
-      } else {
-        throw new Error();
-      }
-    } catch {
+    setTimeout(() => {
       const fallbacks = [
         "Bắt chước âm thanh tiếng sủa của chó con đáng yêu trong 15 giây!",
         "Làm động tác nhảy lò cò xung quanh phòng khách 2 vòng!",
         "Hát tặng cả đội một bài hát ca ngợi quê hương đất nước!",
         "Chịu phạt uống một ngụm nước lọc thật đầy miệng rồi cố gượng giữ im lặng 30 giây!",
         "Đứng thăng bằng một chân, hai tay giang rộng làm hình chim bay 1 phút!",
-        "Vẽ chân dung bằng bút dạ trên giấy người bên cạnh trong 30 giây mắt nhắm nghiền!"
+        "Vẽ chân dung bằng bút dạ trên giấy người bên cạnh trong 30 giây mắt nhắm nghiền!",
+        "Nhảy lò cò một chân và đọc bảng cửu chương 7!",
+        "Phải gọi người đối diện là 'Đại Vương' trong suốt 1 tiếng tiếp theo!",
+        "Đội một cuốn sách lên đầu và đi catwalk qua lại 3 lần không rớt!",
+        "Thụt dầu (Squat) 15 cái liên tục cùng với một nụ cười rạng rỡ!"
       ];
-      setPenaltyText(fallbacks[Math.floor(Math.random() * fallbacks.length)]);
+      const p = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+      setPenaltyText(p);
       setPenaltyDuration("ngay lập tức");
-    } finally {
+      saveState(prompts, flippedCards, activeCategory, p);
       setIsPenaltyLoading(false);
-    }
+    }, 400);
   };
 
   const handleCopyPenalty = () => {
@@ -172,7 +202,12 @@ export default function ChallengeArena() {
             <SmilePlus className="w-4 h-4 text-rose-400" />
             Đại Chiến Thử Thách
           </h3>
-          <p className="text-xs text-slate-400">Chọn thể loại bốc thăm, lật thẻ bài để kích hoạt</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-400">Chọn thể loại bốc thăm, lật thẻ bài để kích hoạt</p>
+            {Object.keys(flippedCards).length > 0 && (
+              <button onClick={clearHistory} className="ml-4 text-[10px] text-red-400 hover:text-red-300 transition">Xóa lịch sử</button>
+            )}
+          </div>
         </div>
 
         {/* Tab Switcher - Grid layout for perfect touch target widths on mobile */}
@@ -291,49 +326,8 @@ export default function ChallengeArena() {
           </div>
         </div>
 
-        {/* AI custom prompt modifiers & Quick Penalty Generator draws */}
+        {/* Quick Penalty Generator draws */}
         <div className="lg:col-span-4 space-y-6">
-          {/* Interactive AI customization setup */}
-          <div className="bg-slate-800/20 border border-slate-700 p-5 rounded-2xl space-y-4">
-            <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-indigo-400" />
-              Cá nhân hoá thử thách AI
-            </h4>
-
-            {/* Custom Audience setup */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Đối tượng tham gia (audience)</label>
-              <input
-                type="text"
-                value={audienceContext}
-                onChange={(e) => setAudienceContext(e.target.value)}
-                placeholder="Ví dụ: Lập trình viên, Phòng Sales, Nhóm Sinh Viên..."
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-400 transition"
-              />
-            </div>
-
-            {/* Custom vibe filter */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Không khí / Mood mong muốn</label>
-              <input
-                type="text"
-                value={customVibe}
-                onChange={(e) => setCustomVibe(e.target.value)}
-                placeholder="Ví dụ: Thâm sâu tinh tế, Lầy quằn quại, Nhẹ nhàng..."
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-400 transition"
-              />
-            </div>
-
-            <button
-              onClick={() => generatePrompts()}
-              disabled={isLoading}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition duration-200 select-none shadow-sm cursor-pointer"
-            >
-              CẬP NHẬT CÂU HỎI AI MỚI
-            </button>
-          </div>
-
-          {/* Quick random penalty trigger cards for losers */}
           <div className="bg-gradient-to-br from-rose-950/20 to-slate-900 border border-rose-500/20 p-5 rounded-2xl space-y-4">
             <div>
               <h4 className="text-sm font-bold text-rose-300 flex items-center gap-1.5">

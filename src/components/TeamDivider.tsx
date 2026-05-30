@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Users, AlertCircle, RefreshCw, Sparkles, Copy, Check, Info } from "lucide-react";
+import { Users, AlertCircle, RefreshCw, Copy, Check, Info } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { TeamResult } from "../types";
 
@@ -18,18 +18,24 @@ interface TeamDividerProps {
 export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
   const [participantsText, setParticipantsText] = useState("");
   const [teamCount, setTeamCount] = useState(2);
-  const [selectedTheme, setSelectedTheme] = useState("funny_animals");
-  const [customThemeText, setCustomThemeText] = useState("");
-  const [isAIActive, setIsAIActive] = useState(true);
   
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [teams, setTeams] = useState<TeamResult[]>([]);
+  const [history, setHistory] = useState<{ id: string; date: string; teams: TeamResult[] }[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
 
-  // Initialize with initial state
+  // Initialize with initial state and local storage history
   React.useEffect(() => {
+    const cachedHistory = localStorage.getItem("team_history");
+    if (cachedHistory) {
+      try {
+        setHistory(JSON.parse(cachedHistory));
+      } catch (e) {}
+    }
+
     if (initialParticipants.length > 0) {
       setParticipantsText(initialParticipants.join("\n"));
     } else {
@@ -52,14 +58,37 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
     "Sắp xong rồi! Cân đối lực lượng đỉnh cao..."
   ];
 
+  const handleUpdateTeams = (result: TeamResult[]) => {
+    setTeams(result);
+    setHistory(prev => {
+      const newHistory = [
+        { id: Date.now().toString(), date: new Date().toLocaleString("vi-VN"), teams: result },
+        ...prev.slice(0, 9)
+      ];
+      localStorage.setItem("team_history", JSON.stringify(newHistory));
+      return newHistory;
+    });
+  };
+
+  const handleClearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem("team_history");
+    setShowHistory(false);
+  };
+
   const handleSplitTeams = async () => {
     const members = participantsText
       .split("\n")
       .map(p => p.trim())
       .filter(p => p.length > 0);
 
+    if (members.length === 0) {
+      setWarning("Vui lòng nhập danh sách tham gia trước khi chia đội!");
+      return;
+    }
+
     if (members.length < teamCount) {
-      alert(`Số thành viên (${members.length}) không thể ít hơn số lượng đội chia (${teamCount})!`);
+      setWarning(`Số thành viên (${members.length}) không đủ để chia làm ${teamCount} đội! Cần ít nhất 1 thành viên cho mỗi đội.`);
       return;
     }
 
@@ -72,78 +101,48 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
       setLoadingStep(prev => (prev < funnyLoadingSteps.length - 1 ? prev + 1 : prev));
     }, 700);
 
-    try {
-      if (isAIActive) {
-        // Find theme text
-        const themeObj = THEME_OPTIONS.find(t => t.id === selectedTheme);
-        const themeLabel = customThemeText.trim() || (themeObj ? themeObj.label : "Thành viên độc đắc");
-
-        const response = await fetch("/api/gemini/teams", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            members,
-            teamCount,
-            theme: themeLabel,
-            mood: "Hài hước, vui tươi, vần điệu"
-          })
-        });
-
-        const data = await response.json();
-        if (response.ok && data.teams) {
-          setTeams(data.teams);
-          if (data.warning) setWarning(data.warning);
-        } else {
-          throw new Error(data.error || "Gặp lỗi khi hỏi ý kiến AI.");
-        }
-      } else {
-        // Local classic random splitter fallback
+    setTimeout(() => {
+      try {
         const shuffled = [...members].sort(() => Math.random() - 0.5);
-        const result: TeamResult[] = Array.from({ length: teamCount }, (_, i) => ({
-          teamName: `Đội ${i + 1}`,
-          slogan: "Làm hết sức, chơi hết mình!",
-          emoji: "🏆",
-          members: []
-        }));
+        const fallbackThemes = [
+          { name: "Sư Tử Lửa", slogan: "Lướt trên bão lửa 🦁", emoji: "🦁" },
+          { name: "Cá Mập Vĩ Đại", slogan: "Cắn cắp mọi cơ hội 🦈", emoji: "🦈" },
+          { name: "Phượng Hoàng", slogan: "Tái sinh rực rỡ ✨", emoji: "✨" },
+          { name: "Đại Bàng Sấm", slogan: "Tìm kiếm đỉnh cao 🦅", emoji: "🦅" },
+          { name: "Gấu Hoang", slogan: "Bền bỉ can trường 🐻", emoji: "🐻" },
+          { name: "Khủng Long Tinh Nghịch", slogan: "Quẩy tung bãi tiệc 🦖", emoji: "🦖" },
+          { name: "Soái Ca Trỗi Dậy", slogan: "Vẻ đẹp đè bẹp tất cả 😎", emoji: "😎" },
+          { name: "Bóng Đêm Săn Mồi", slogan: "Ẩn mình đón chờ thời cơ 🐺", emoji: "🐺" },
+          { name: "Mãnh Hổ Khởi Nguyên", slogan: "Gầm vang rừng xanh 🐯", emoji: "🐯" },
+          { name: "Khỉ Đột Tăng Động", slogan: "Quẩy nát muôn nơi 🦧", emoji: "🦧" },
+          { name: "Biệt Đội Chuối Tây", slogan: "Vàng tươi roi rói 🍌", emoji: "🍌" },
+          { name: "Tia Chớp Nhanh Chứa", slogan: "Tốc biến trong chớp mắt ⚡", emoji: "⚡" },
+        ];
+
+        // Shuffle themes
+        const shuffledThemes = [...fallbackThemes].sort(() => Math.random() - 0.5);
+
+        const result: TeamResult[] = Array.from({ length: teamCount }, (_, i) => {
+          const theme = shuffledThemes[i % shuffledThemes.length];
+          return {
+            teamName: `${theme.name} ${i + 1}`,
+            slogan: theme.slogan,
+            emoji: theme.emoji,
+            members: []
+          };
+        });
 
         shuffled.forEach((m, idx) => {
           result[idx % teamCount].members.push(m);
         });
-        setTeams(result);
+        handleUpdateTeams(result);
+      } catch (err: any) {
+        console.warn("Lỗi chia đội:", err);
+      } finally {
+        clearInterval(stepInterval);
+        setIsLoading(false);
       }
-    } catch (err: any) {
-      console.warn("Lỗi AI chia đội. Chuyển sang chia đội ngẫu nhiên cục bộ:", err);
-      setWarning("AI tạm thời bận. Đã tự động chia đội bằng thuật toán nguyên bản.");
-      
-      // Perform manual fallback immediately
-      const shuffled = [...members].sort(() => Math.random() - 0.5);
-      const fallbackThemes = [
-        { name: "Sư Tử Lửa", slogan: "Lướt trên bão lửa 🦁", emoji: "🦁" },
-        { name: "Cá Mập Vĩ Đại", slogan: "Cắn cắp mọi cơ hội 🦈", emoji: "🦈" },
-        { name: "Phượng Hoàng", slogan: "Tái sinh rực rỡ ✨", emoji: "✨" },
-        { name: "Đại Bàng Sấm", slogan: "Tìm kiếm đỉnh cao 🦅", emoji: "🦅" },
-        { name: "Gấu Hoang", slogan: "Bền bỉ can trường 🐻", emoji: "🐻" },
-        { name: "Khủng Long Tinh Nghịch", slogan: "Quẩy tung bãi tiệc 🦖", emoji: "🦖" }
-      ];
-
-      const result: TeamResult[] = Array.from({ length: teamCount }, (_, i) => {
-        const theme = fallbackThemes[i % fallbackThemes.length];
-        return {
-          teamName: `${theme.name} ${i + 1}`,
-          slogan: theme.slogan,
-          emoji: theme.emoji,
-          members: []
-        };
-      });
-
-      shuffled.forEach((m, idx) => {
-        result[idx % teamCount].members.push(m);
-      });
-      setTeams(result);
-    } finally {
-      clearInterval(stepInterval);
-      setIsLoading(false);
-    }
+    }, 1200); // Simulate some thought time
   };
 
   const handleCopyTeamsResult = () => {
@@ -163,9 +162,19 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
       {/* Configuration Sidebar */}
       <div className="lg:col-span-4 bg-slate-800/20 border border-slate-700/80 p-5 rounded-2xl space-y-5">
-        <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-          <Users className="w-4 h-4 text-indigo-400" />
-          Thiết Lập Chia Đội
+        <h3 className="text-sm font-bold text-slate-300 flex justify-between items-center gap-2">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-indigo-400" />
+            Thiết Lập Chia Đội
+          </div>
+          {history.length > 0 && (
+            <button 
+              onClick={() => setShowHistory(true)}
+              className="text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 px-2 py-1 rounded-md transition font-bold"
+            >
+              Lịch Sử ({history.length})
+            </button>
+          )}
         </h3>
 
         {/* Members Roster Editor */}
@@ -187,7 +196,7 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
           </label>
           
           {/* Stepper controls for fingers - touch size friendly */}
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-center gap-3">
             <button
               type="button"
               onClick={() => setTeamCount(prev => Math.max(2, prev - 1))}
@@ -196,20 +205,18 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
             >
               －
             </button>
-            <div className="flex-1">
-              <input
-                type="range"
-                min={2}
-                max={8}
-                value={teamCount}
-                onChange={(e) => setTeamCount(parseInt(e.target.value))}
-                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500 focus:outline-none"
-              />
-            </div>
+            <input
+              type="number"
+              min={2}
+              max={200}
+              value={teamCount}
+              onChange={(e) => setTeamCount(parseInt(e.target.value) || 2)}
+              className="w-20 h-12 bg-slate-900 border border-slate-700 rounded-xl text-center font-bold text-lg text-white focus:outline-none focus:border-indigo-500 shadow-inner"
+            />
             <button
               type="button"
-              onClick={() => setTeamCount(prev => Math.min(8, prev + 1))}
-              disabled={teamCount >= 8}
+              onClick={() => setTeamCount(prev => Math.min(200, prev + 1))}
+              disabled={teamCount >= 200}
               className="w-12 h-12 bg-slate-800 hover:bg-slate-750 border border-slate-700 disabled:opacity-30 disabled:pointer-events-none rounded-xl text-lg font-black text-slate-200 flex items-center justify-center transition active:scale-95 touch-manipulation cursor-pointer"
             >
               ＋
@@ -233,69 +240,6 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
               </button>
             ))}
           </div>
-        </div>
-
-        {/* AI Activation Configs */}
-        <div className="border-t border-slate-700/60 pt-4.5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                Dùng AI đặt tên & slogan
-              </span>
-              <span className="text-[10px] text-slate-400">Sử dụng Gemini sinh khẩu hiệu, tên siêu bựa</span>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isAIActive}
-                onChange={(e) => setIsAIActive(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-9 h-5 bg-slate-750 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
-          </div>
-
-          <AnimatePresence>
-            {isAIActive && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden space-y-2.5"
-              >
-                <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">Chủ đề tên nhóm gợi ý</label>
-                  <select
-                    value={selectedTheme}
-                    onChange={(e) => {
-                      setSelectedTheme(e.target.value);
-                      if (e.target.value !== "custom") setCustomThemeText("");
-                    }}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-400.transition"
-                  >
-                    {THEME_OPTIONS.map(theme => (
-                      <option key={theme.id} value={theme.id}>{theme.label}</option>
-                    ))}
-                    <option value="custom">✍️ Tự nhập chủ đề riêng...</option>
-                  </select>
-                </div>
-
-                {selectedTheme === "custom" && (
-                  <div>
-                    <label className="text-[10px] text-slate-500 block mb-1">Mô tả chủ đề tự chọn của bạn</label>
-                    <input
-                      type="text"
-                      value={customThemeText}
-                      onChange={(e) => setCustomThemeText(e.target.value)}
-                      placeholder="Ví dụ: Đại chiến hải tặc vương luffy"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-450 transition"
-                    />
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         <button
@@ -421,13 +365,82 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
             <p className="text-xs max-w-sm mx-auto leading-relaxed text-slate-400 mb-4">
               Nhập danh sách đồng đội ở bên trái, thiết lập số lượng đội mong muốn, sau đó click nút hành động để xáo trộn siêu công bằng!
             </p>
-            <div className="flex items-center justify-center gap-1.5 text-[10px] text-indigo-400 bg-indigo-500/5 py-1.5 px-3.5 rounded-full w-fit mx-auto border border-indigo-500/10">
-              <Info className="w-3.5 h-3.5 flex-shrink-0" />
-              Khuyên dùng: Bật AI để được tạo tên đội độc và các câu slogan bựa đỉnh phong!
-            </div>
           </div>
         )}
       </div>
+
+      {/* History Modal */}
+      <AnimatePresence>
+        {showHistory && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-700 rounded-2xl flex flex-col w-full max-w-3xl max-h-[85vh] shadow-2xl overflow-hidden relative"
+            >
+              <div className="p-4 sm:p-5 border-b border-slate-700 flex justify-between items-center bg-slate-800/40">
+                <h4 className="font-bold text-white flex items-center gap-2">
+                  <Users className="w-4 h-4 text-cyan-400" />
+                  Lịch Sử Chia Đội
+                </h4>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleClearHistory}
+                    className="text-[11px] font-bold text-red-400 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg transition"
+                  >
+                    Xoá Lịch Sử
+                  </button>
+                  <button
+                    onClick={() => setShowHistory(false)}
+                    className="text-[11px] font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-6 custom-scrollbar">
+                {history.map((item, idx) => (
+                  <div key={item.id} className="bg-slate-850 border border-slate-800 rounded-xl p-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-xs font-bold text-slate-400 font-mono">Lần {history.length - idx}</span>
+                      <span className="text-[10px] text-slate-500">{item.date}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {item.teams.map((t, i) => (
+                        <div key={i} className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/50">
+                          <p className="text-xs font-bold text-white mb-1">{t.emoji} {t.teamName}</p>
+                          <p className="text-[10px] text-slate-500 italic mb-2">"{t.slogan}"</p>
+                          <div className="flex flex-wrap gap-1">
+                            {t.members.map((m, mIdx) => (
+                              <span key={mIdx} className="text-[9px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded leading-tight">
+                                {m}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="mt-3 text-right">
+                       <button
+                        onClick={() => {
+                          setTeams(item.teams);
+                          setShowHistory(false);
+                        }}
+                        className="text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded border border-indigo-500/20 transition font-bold"
+                      >
+                        Mở Lại Kết Quả Này
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

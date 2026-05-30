@@ -11,6 +11,7 @@ export default function LuckyJar({ initialParticipants }: LuckyJarProps) {
   const [drawnList, setDrawnList] = useState<string[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawnName, setDrawnName] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [funnyMessage, setFunnyMessage] = useState("");
   const [customInputList, setCustomInputList] = useState("");
 
@@ -38,6 +39,21 @@ export default function LuckyJar({ initialParticipants }: LuckyJarProps) {
   };
 
   useEffect(() => {
+    // Only apply initialParticipants if we don't have an active game going to avoid resetting
+    const cachedDrawn = localStorage.getItem("jar_drawn");
+    const cachedPool = localStorage.getItem("jar_pool");
+
+    if (cachedDrawn && cachedPool) {
+      try {
+        setDrawnList(JSON.parse(cachedDrawn));
+        const p = JSON.parse(cachedPool);
+        setPool(p);
+        const combined = [...p, ...JSON.parse(cachedDrawn)].sort();
+        setCustomInputList(combined.join("\n"));
+        return;
+      } catch (e) {}
+    }
+
     if (initialParticipants.length > 0) {
       setPool(initialParticipants);
       setCustomInputList(initialParticipants.join("\n"));
@@ -54,14 +70,20 @@ export default function LuckyJar({ initialParticipants }: LuckyJarProps) {
     setDrawnName(null);
   }, [initialParticipants]);
 
+  const saveState = (newPool: string[], newDrawn: string[]) => {
+    setPool(newPool);
+    setDrawnList(newDrawn);
+    localStorage.setItem("jar_pool", JSON.stringify(newPool));
+    localStorage.setItem("jar_drawn", JSON.stringify(newDrawn));
+  };
+
   const handleUpdatePool = () => {
     const list = customInputList
       .split("\n")
       .map(name => name.trim())
       .filter(name => name.length > 0);
     
-    setPool(list);
-    setDrawnList([]);
+    saveState(list, []);
     setDrawnName(null);
   };
 
@@ -78,9 +100,14 @@ export default function LuckyJar({ initialParticipants }: LuckyJarProps) {
   };
 
   const drawOne = () => {
-    if (isDrawing || pool.length === 0) return;
+    if (isDrawing) return;
+    if (pool.length === 0) {
+      setWarning("Hũ bốc thăm đã trống! Vui lòng thêm danh sách mới hoặc đặt lại (Reset) để tiếp tục.");
+      return;
+    }
 
     setIsDrawing(true);
+    setWarning(null);
     setDrawnName(null);
     setFunnyMessage(getFunnyChamberLoadingMessage());
 
@@ -92,8 +119,11 @@ export default function LuckyJar({ initialParticipants }: LuckyJarProps) {
 
       playDrawSound();
       setDrawnName(winner);
-      setDrawnList(prev => [winner, ...prev]);
-      setPool(prev => prev.filter((_, idx) => idx !== winnerIdx));
+      
+      const newDrawnList = [winner, ...drawnList];
+      const newPool = pool.filter((_, idx) => idx !== winnerIdx);
+      saveState(newPool, newDrawnList);
+      
       setIsDrawing(false);
     }, 1800);
   };
@@ -101,10 +131,13 @@ export default function LuckyJar({ initialParticipants }: LuckyJarProps) {
   const resetGame = () => {
     // Reset pool back to initial state (combining current pool and drawn list)
     const combined = [...pool, ...drawnList].sort();
-    setPool(combined);
-    setDrawnList([]);
+    saveState(combined, []);
     setDrawnName(null);
     setIsDrawing(false);
+  };
+
+  const clearHistory = () => {
+    saveState([...pool, ...drawnList].sort(), []);
   };
 
   return (
@@ -209,6 +242,12 @@ export default function LuckyJar({ initialParticipants }: LuckyJarProps) {
             )}
           </div>
 
+          {warning && (
+            <div className="text-center text-rose-400 text-xs font-semibold bg-rose-500/10 py-2 px-3 rounded-lg border border-rose-500/20 w-full mb-3">
+              {warning}
+            </div>
+          )}
+
           {/* Trigger bốc thăm */}
           <button
             onClick={drawOne}
@@ -264,6 +303,14 @@ export default function LuckyJar({ initialParticipants }: LuckyJarProps) {
               <Trophy className="w-4 h-4 text-yellow-500" />
               Lịch sử rút quân ({drawnList.length})
             </h4>
+            {drawnList.length > 0 && (
+              <button
+                onClick={clearHistory}
+                className="text-xs font-semibold text-red-400 hover:text-red-300 transition"
+              >
+                Xóa lịch sử
+              </button>
+            )}
           </div>
 
           <div className="max-h-[200px] overflow-y-auto divide-y divide-slate-700/60 custom-scrollbar">

@@ -25,6 +25,7 @@ export default function LuckyWheel({ initialParticipants }: LuckyWheelProps) {
   const [newOptionText, setNewOptionText] = useState("");
   const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [showWinnerModal, setShowWinnerModal] = useState(false);
@@ -34,8 +35,18 @@ export default function LuckyWheel({ initialParticipants }: LuckyWheelProps) {
   const requestRef = useRef<number | null>(null);
   const lastSoundTickRef = useRef<number>(0);
 
-  // Load initial options
+  // Load initial options & history
   useEffect(() => {
+    // Load history
+    const cachedHistory = localStorage.getItem("wheel_history");
+    if (cachedHistory) {
+      try {
+        setHistory(JSON.parse(cachedHistory));
+      } catch (e) {
+        console.error("Failed to parse wheel history", e);
+      }
+    }
+
     if (initialParticipants.length > 0) {
       const mapped = initialParticipants.map((p, idx) => ({
         id: `p-${idx}-${Date.now()}`,
@@ -185,9 +196,14 @@ export default function LuckyWheel({ initialParticipants }: LuckyWheelProps) {
 
   // Handle spin initiation with natural physics acceleration & deceleration
   const spinWheel = () => {
-    if (isSpinning || options.length === 0) return;
+    if (isSpinning) return;
+    if (options.length === 0) {
+      setWarning("Vui lòng thêm người tham gia / tuỳ chọn trước khi quay!");
+      return;
+    }
 
     setIsSpinning(true);
+    setWarning(null);
     setWinner(null);
     setShowWinnerModal(false);
 
@@ -236,7 +252,11 @@ export default function LuckyWheel({ initialParticipants }: LuckyWheelProps) {
         if (winOpt) {
           setWinner(winOpt.text);
           setShowWinnerModal(true);
-          setHistory(prev => [winOpt.text, ...prev.slice(0, 19)]);
+          setHistory(prev => {
+            const next = [winOpt.text, ...prev.slice(0, 19)];
+            localStorage.setItem("wheel_history", JSON.stringify(next));
+            return next;
+          });
         }
       } else {
         requestRef.current = requestAnimationFrame(animate);
@@ -279,6 +299,11 @@ export default function LuckyWheel({ initialParticipants }: LuckyWheelProps) {
     setOptions([]);
     setWinner(null);
     setShowWinnerModal(false);
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem("wheel_history");
   };
 
   return (
@@ -355,23 +380,30 @@ export default function LuckyWheel({ initialParticipants }: LuckyWheelProps) {
         </div>
 
         {/* Spin controls */}
-        <div className="flex items-center gap-4 w-full max-w-xs justify-center mb-4">
-          <button
-            onClick={() => setIsMuted(!isMuted)}
-            className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white transition duration-150"
-            title={isMuted ? "Bật âm thanh" : "Tắt âm thanh"}
-          >
-            {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
-          </button>
+        <div className="flex flex-col items-center gap-4 w-full max-w-xs justify-center mb-4">
+          <div className="flex gap-4 w-full">
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-white transition duration-150"
+              title={isMuted ? "Bật âm thanh" : "Tắt âm thanh"}
+            >
+              {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+            </button>
 
-          <button
-            onClick={spinWheel}
-            disabled={isSpinning || options.length === 0}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 transition duration-200 shadow-lg shadow-indigo-600/15"
-          >
-            <Play className="w-5 h-5 fill-current" />
-            {isSpinning ? "Đang quay..." : "QUAY NGAY"}
-          </button>
+            <button
+              onClick={spinWheel}
+              disabled={isSpinning || options.length === 0}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 transition duration-200 shadow-lg shadow-indigo-600/15"
+            >
+              <Play className="w-5 h-5 fill-current" />
+              {isSpinning ? "Đang quay..." : "QUAY NGAY"}
+            </button>
+          </div>
+          {warning && (
+            <div className="text-center text-rose-400 text-xs font-semibold bg-rose-500/10 py-2 px-3 rounded-lg border border-rose-500/20 w-full">
+              {warning}
+            </div>
+          )}
         </div>
 
         {/* Spin Result Display */}
@@ -497,9 +529,19 @@ export default function LuckyWheel({ initialParticipants }: LuckyWheelProps) {
         {/* Lượt quay gần đây */}
         {history.length > 0 && (
           <div className="bg-slate-800/20 border border-slate-700/40 rounded-2xl p-4">
-            <h5 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-              Lịch sử lượt quay trước
-            </h5>
+            <div className="flex justify-between items-center mb-2.5">
+              <h5 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Lịch sử lượt quay trước
+              </h5>
+              <button 
+                onClick={clearHistory}
+                className="text-[10px] bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition"
+                title="Xoá lịch sử quay"
+              >
+                <Trash2 className="w-3 h-3" />
+                Xoá
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2 max-h-[120px] overflow-y-auto">
               {history.map((name, idx) => (
                 <div
