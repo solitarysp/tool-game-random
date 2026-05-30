@@ -15,6 +15,7 @@ export interface TeamResult {
   slogan: string;
   emoji: string;
   members: string[];
+  captain?: string;
 }
 
 export interface ChallengeCategory {

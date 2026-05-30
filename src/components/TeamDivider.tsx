@@ -18,6 +18,9 @@ interface TeamDividerProps {
 export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
   const [participantsText, setParticipantsText] = useState("");
   const [teamCount, setTeamCount] = useState(2);
+  const [useCustomNames, setUseCustomNames] = useState(false);
+  const [customNamesText, setCustomNamesText] = useState("Đội 1\nĐội 2");
+  const [pickCaptain, setPickCaptain] = useState(false);
   
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
@@ -121,20 +124,44 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
 
         // Shuffle themes
         const shuffledThemes = [...fallbackThemes].sort(() => Math.random() - 0.5);
+        
+        const parsedCustomNames = customNamesText.split('\n').map(n => n.trim()).filter(n => n.length > 0);
 
         const result: TeamResult[] = Array.from({ length: teamCount }, (_, i) => {
-          const theme = shuffledThemes[i % shuffledThemes.length];
-          return {
-            teamName: `${theme.name} ${i + 1}`,
-            slogan: theme.slogan,
-            emoji: theme.emoji,
-            members: []
-          };
+          if (useCustomNames && parsedCustomNames.length > 0) {
+            const nameToUse = parsedCustomNames[i] || `${parsedCustomNames[i % parsedCustomNames.length]} ${Math.floor(i / parsedCustomNames.length) + 1}`;
+            return {
+              teamName: nameToUse,
+              slogan: "Làm hết sức, chiến hết mình!",
+              emoji: "🎯",
+              members: [],
+              captain: null
+            };
+          } else {
+            const theme = shuffledThemes[i % shuffledThemes.length];
+            return {
+              teamName: `${theme.name} ${i + 1}`,
+              slogan: theme.slogan,
+              emoji: theme.emoji,
+              members: [],
+              captain: null
+            };
+          }
         });
 
         shuffled.forEach((m, idx) => {
           result[idx % teamCount].members.push(m);
         });
+
+        if (pickCaptain) {
+          result.forEach(team => {
+            if (team.members.length > 0) {
+              const captainIdx = Math.floor(Math.random() * team.members.length);
+              team.captain = team.members[captainIdx];
+            }
+          });
+        }
+
         handleUpdateTeams(result);
       } catch (err: any) {
         console.warn("Lỗi chia đội:", err);
@@ -242,6 +269,51 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
           </div>
         </div>
 
+        {/* Advanced Output Settings */}
+        <div className="space-y-4 bg-slate-900/60 p-4 rounded-xl border border-slate-700/40">
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer mb-2">
+              <input
+                type="checkbox"
+                checked={useCustomNames}
+                onChange={(e) => setUseCustomNames(e.target.checked)}
+                className="w-3.5 h-3.5 bg-slate-800 border-slate-700 rounded text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900"
+              />
+              <span className="text-xs font-semibold text-slate-300">Sử dụng tên đội tuỳ chỉnh</span>
+            </label>
+            <AnimatePresence>
+              {useCustomNames && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <textarea
+                    value={customNamesText}
+                    onChange={(e) => setCustomNamesText(e.target.value)}
+                    placeholder="Nhập tên đội (mỗi dòng một tên)"
+                    className="w-full mt-1.5 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition min-h-[80px]"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Mỗi dòng một tên. Nếu số đội nhiều hơn số tên, tên sẽ tự động lặp lại kèm theo số (VD: Đội 1 2).</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={pickCaptain}
+                onChange={(e) => setPickCaptain(e.target.checked)}
+                className="w-3.5 h-3.5 bg-slate-800 border-slate-700 rounded text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900"
+              />
+              <span className="text-xs font-semibold text-slate-300">Chọn đội trưởng ngẫu nhiên</span>
+            </label>
+          </div>
+        </div>
+
         <button
           onClick={handleSplitTeams}
           disabled={isLoading}
@@ -335,14 +407,22 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
                         Thành viên ({team.members.length})
                       </p>
                       <div className="flex flex-wrap gap-1.5">
-                        {team.members.map((member, mIdx) => (
-                          <span
-                            key={mIdx}
-                            className="text-xs bg-slate-800 border border-slate-750 text-slate-300 py-1 px-2.5 rounded-lg"
-                          >
-                            {member}
-                          </span>
-                        ))}
+                        {team.members.map((member, mIdx) => {
+                          const isCaptain = team.captain === member;
+                          return (
+                            <span
+                              key={mIdx}
+                              className={`text-xs py-1 px-2.5 rounded-lg border flex items-center gap-1 ${
+                                isCaptain 
+                                  ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-200 font-bold" 
+                                  : "bg-slate-800 border-slate-750 text-slate-300"
+                              }`}
+                            >
+                              {isCaptain && <span className="text-sm leading-none" title="Đội Trưởng">👑</span>}
+                              {member}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -413,11 +493,20 @@ export default function TeamDivider({ initialParticipants }: TeamDividerProps) {
                           <p className="text-xs font-bold text-white mb-1">{t.emoji} {t.teamName}</p>
                           <p className="text-[10px] text-slate-500 italic mb-2">"{t.slogan}"</p>
                           <div className="flex flex-wrap gap-1">
-                            {t.members.map((m, mIdx) => (
-                              <span key={mIdx} className="text-[9px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded leading-tight">
-                                {m}
-                              </span>
-                            ))}
+                            {t.members.map((m, mIdx) => {
+                              const isCaptain = t.captain === m;
+                              return (
+                                <span 
+                                  key={mIdx} 
+                                  className={`text-[9px] px-1.5 py-0.5 rounded leading-tight flex items-center gap-0.5 ${
+                                    isCaptain ? "bg-indigo-500/20 text-indigo-300 font-bold" : "bg-slate-800 text-slate-300"
+                                  }`}
+                                >
+                                  {isCaptain && <span>👑</span>}
+                                  {m}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
                       ))}
