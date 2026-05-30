@@ -1,0 +1,6 @@
+{
+  "name": "Game Teambuilding & Bốc Thăm Ngẫu Nhiên",
+  "description": "Ứng dụng tổng hợp các trò chơi ngẫu nhiên, vòng quay may mắn, bốc thăm trúng thưởng và chia đội thông minh tích hợp AI hỗ trợ teambuilding và sự kiện.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
